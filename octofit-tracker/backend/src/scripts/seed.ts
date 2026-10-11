@@ -6,6 +6,10 @@ import { TeamModel } from '../models/team.js';
 import { UserModel } from '../models/user.js';
 import { WorkoutModel } from '../models/workout.js';
 
+/**
+ * Seed sample users, teams, activities, leaderboard entries, and workouts.
+ * Run with `npm run seed` from the backend package.
+ */
 const users = [
   { displayName: 'Alex Morgan', email: 'alex.morgan@example.com', bio: 'Enjoys running and weekend hikes.', team: 'Trailblazers' },
   { displayName: 'Jordan Lee', email: 'jordan.lee@example.com', bio: 'Building strength one workout at a time.', team: 'Trailblazers' },
