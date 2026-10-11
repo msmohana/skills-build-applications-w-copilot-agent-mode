@@ -1,4 +1,4 @@
-import { model, Schema, Types } from 'mongoose';
+import { model, Schema, Types, type Model } from 'mongoose';
 
 export interface Team {
   name: string;
@@ -6,7 +6,7 @@ export interface Team {
   members: Types.ObjectId[];
 }
 
-const teamSchema = new Schema<Team>(
+const teamSchema: Schema<Team> = new Schema(
   {
     name: { type: String, required: true, unique: true, trim: true, maxlength: 80 },
     description: { type: String, trim: true, maxlength: 500 },
@@ -15,4 +15,4 @@ const teamSchema = new Schema<Team>(
   { timestamps: true },
 );
 
-export const TeamModel = model<Team>('Team', teamSchema);
+export const TeamModel: Model<Team> = model('Team', teamSchema);

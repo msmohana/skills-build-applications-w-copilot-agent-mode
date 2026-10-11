@@ -1,4 +1,4 @@
-import { model, Schema, Types } from 'mongoose';
+import { model, Schema, Types, type Model } from 'mongoose';
 
 export interface LeaderboardEntry {
   user: Types.ObjectId;
@@ -9,7 +9,7 @@ export interface LeaderboardEntry {
   periodStart: Date;
 }
 
-const leaderboardSchema = new Schema<LeaderboardEntry>(
+const leaderboardSchema: Schema<LeaderboardEntry> = new Schema(
   {
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     team: { type: Schema.Types.ObjectId, ref: 'Team' },
@@ -23,4 +23,4 @@ const leaderboardSchema = new Schema<LeaderboardEntry>(
 
 leaderboardSchema.index({ user: 1, period: 1, periodStart: 1 }, { unique: true });
 
-export const LeaderboardModel = model<LeaderboardEntry>('Leaderboard', leaderboardSchema);
+export const LeaderboardModel: Model<LeaderboardEntry> = model('Leaderboard', leaderboardSchema);

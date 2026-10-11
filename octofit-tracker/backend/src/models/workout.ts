@@ -1,4 +1,4 @@
-import { model, Schema } from 'mongoose';
+import { model, Schema, type Model } from 'mongoose';
 
 export interface WorkoutExercise {
   name: string;
@@ -16,7 +16,7 @@ export interface Workout {
   exercises: WorkoutExercise[];
 }
 
-const workoutSchema = new Schema<Workout>(
+const workoutSchema: Schema<Workout> = new Schema(
   {
     title: { type: String, required: true, trim: true, maxlength: 120 },
     description: { type: String, trim: true, maxlength: 1000 },
@@ -35,4 +35,4 @@ const workoutSchema = new Schema<Workout>(
   { timestamps: true },
 );
 
-export const WorkoutModel = model<Workout>('Workout', workoutSchema);
+export const WorkoutModel: Model<Workout> = model('Workout', workoutSchema);

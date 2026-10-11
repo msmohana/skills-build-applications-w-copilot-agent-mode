@@ -1,4 +1,4 @@
-import { model, Schema, Types } from 'mongoose';
+import { model, Schema, Types, type Model } from 'mongoose';
 
 export interface Activity {
   user: Types.ObjectId;
@@ -9,7 +9,7 @@ export interface Activity {
   performedAt: Date;
 }
 
-const activitySchema = new Schema<Activity>(
+const activitySchema: Schema<Activity> = new Schema(
   {
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     type: {
@@ -25,4 +25,4 @@ const activitySchema = new Schema<Activity>(
   { timestamps: true },
 );
 
-export const ActivityModel = model<Activity>('Activity', activitySchema);
+export const ActivityModel: Model<Activity> = model('Activity', activitySchema);
