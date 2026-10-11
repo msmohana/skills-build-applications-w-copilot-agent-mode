@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import mongoose from 'mongoose';
 import { connectDatabase } from '../config/database.js';
 import { ActivityModel } from '../models/activity.js';
@@ -135,12 +136,15 @@ async function seedDatabase(): Promise<void> {
         user: userId,
         ...activity,
         performedAt: getActivityDate(weekStart, currentWeekday, userIndex, activityIndex),
+        _id: createSeedActivityId(user.email, activityIndex),
       }));
     });
 
+    await removePreviousSeedActivities(userRecords, weekStart);
+
     for (const activity of activityFixtures) {
       await ActivityModel.findOneAndUpdate(
-        { user: activity.user, type: activity.type, performedAt: activity.performedAt },
+        { _id: activity._id },
         { $set: activity },
         { upsert: true, returnDocument: 'after', runValidators: true },
       );
@@ -227,6 +231,90 @@ function getActivityDate(
   }
 
   return date;
+}
+
+function createSeedActivityId(email: string, activityIndex: number): mongoose.Types.ObjectId {
+  const id = createHash('sha256')
+    .update(`octofit-seed-activity-v1:${email}:${activityIndex}`)
+    .digest('hex')
+    .slice(0, 24);
+  return new mongoose.Types.ObjectId(id);
+}
+
+async function removePreviousSeedActivities(
+  userRecords: Map<string, mongoose.Types.ObjectId>,
+  weekStart: Date,
+): Promise<void> {
+  const userIds = [...userRecords.values()];
+  const existingActivities = await ActivityModel.find({ user: { $in: userIds } }).lean();
+  const stableActivityIds = new Set(
+    users.flatMap((user, userIndex) =>
+      activityPlans[userIndex].map((_, activityIndex) => createSeedActivityId(user.email, activityIndex).toString()),
+    ),
+  );
+  const legacyFixtures = [
+    { email: 'alex.morgan@example.com', type: 'running', durationMinutes: 25, distanceKm: 3, points: 40, hour: 1 },
+    { email: 'alex.morgan@example.com', type: 'strength', durationMinutes: 20, points: 30, hour: 2 },
+    { email: 'jordan.lee@example.com', type: 'strength', durationMinutes: 30, points: 50, hour: 3 },
+    { email: 'jordan.lee@example.com', type: 'walking', durationMinutes: 25, distanceKm: 3, points: 40, hour: 4 },
+    { email: 'sam.rivera@example.com', type: 'cycling', durationMinutes: 35, distanceKm: 5, points: 60, hour: 5 },
+    { email: 'sam.rivera@example.com', type: 'swimming', durationMinutes: 30, points: 50, hour: 6 },
+    { email: 'taylor.kim@example.com', type: 'walking', durationMinutes: 40, points: 70, hour: 7 },
+    { email: 'taylor.kim@example.com', type: 'running', durationMinutes: 35, distanceKm: 5, points: 60, hour: 8 },
+  ] as const;
+  const emailById = new Map([...userRecords].map(([email, id]) => [id.toString(), email]));
+  const nextWeekStart = new Date(weekStart);
+  nextWeekStart.setUTCDate(nextWeekStart.getUTCDate() + 7);
+
+  const staleActivityIds = existingActivities
+    .filter((activity) => {
+      if (stableActivityIds.has(activity._id.toString())) {
+        return false;
+      }
+
+      const email = emailById.get(activity.user.toString());
+      if (!email) {
+        return false;
+      }
+
+      const matchesCurrentFixture = activityPlans.some((plan, userIndex) => {
+        if (users[userIndex].email !== email) {
+          return false;
+        }
+
+        return plan.some(
+          (fixture) =>
+            fixture.type === activity.type &&
+            fixture.durationMinutes === activity.durationMinutes &&
+            fixture.points === activity.points &&
+            ('distanceKm' in fixture ? fixture.distanceKm === activity.distanceKm : activity.distanceKm === undefined) &&
+            activity.performedAt >= weekStart &&
+            activity.performedAt < nextWeekStart,
+        );
+      });
+
+      const legacyFixture = legacyFixtures.find(
+        (fixture) =>
+          fixture.email === email &&
+          fixture.type === activity.type &&
+          fixture.durationMinutes === activity.durationMinutes &&
+          fixture.points === activity.points &&
+          ('distanceKm' in fixture ? fixture.distanceKm === activity.distanceKm : activity.distanceKm === undefined) &&
+          activity.performedAt.getUTCDay() === 1 &&
+          activity.performedAt.getUTCHours() === fixture.hour &&
+          activity.performedAt.getUTCMinutes() === 0 &&
+          activity.performedAt.getUTCSeconds() === 0 &&
+          activity.performedAt.getUTCMilliseconds() === 0,
+      );
+
+      return matchesCurrentFixture || legacyFixture !== undefined;
+    })
+    .map((activity) => activity._id);
+
+  if (staleActivityIds.length > 0) {
+    await ActivityModel.deleteMany({ _id: { $in: staleActivityIds } });
+    console.log(`Removed ${staleActivityIds.length} obsolete sample activities.`);
+  }
 }
 
 seedDatabase();
