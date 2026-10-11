@@ -1,14 +1,14 @@
 import { createHash } from 'node:crypto';
 import mongoose from 'mongoose';
 import { connectDatabase } from '../config/database.js';
-import { ActivityModel } from '../models/activity.js';
-import { LeaderboardModel } from '../models/leaderboard.js';
+import { ActivityModel, type Activity } from '../models/activity.js';
+import { LeaderboardModel, type LeaderboardEntry } from '../models/leaderboard.js';
 import { TeamModel } from '../models/team.js';
 import { UserModel } from '../models/user.js';
 import { WorkoutModel } from '../models/workout.js';
 
 /**
- * Seed sample users, teams, activities, leaderboard entries, and workouts.
+ * Seed the octofit_db database with test data for all OctoFit resources.
  * Run with `npm run seed` from the backend package.
  */
 const users = [
@@ -78,17 +78,59 @@ const workouts = [
   },
 ] as const;
 
+const writers = {
+  user: {
+    create: (data: (typeof users)[number], teamId: mongoose.Types.ObjectId) =>
+      UserModel.findOneAndUpdate(
+        { email: data.email },
+        {
+          $set: { displayName: data.displayName, bio: data.bio, team: teamId },
+          $setOnInsert: { email: data.email },
+        },
+        { upsert: true, returnDocument: 'after', runValidators: true },
+      ),
+  },
+  team: {
+    create: (data: (typeof teams)[number]) =>
+      TeamModel.findOneAndUpdate(
+        { name: data.name },
+        { $set: data, $setOnInsert: { members: [] } },
+        { upsert: true, returnDocument: 'after', runValidators: true },
+      ),
+  },
+  activity: {
+    create: (data: Activity & { _id: mongoose.Types.ObjectId }) =>
+      ActivityModel.findOneAndUpdate(
+        { _id: data._id },
+        { $set: data },
+        { upsert: true, returnDocument: 'after', runValidators: true },
+      ),
+  },
+  leaderboard: {
+    create: (data: LeaderboardEntry) =>
+      LeaderboardModel.findOneAndUpdate(
+        { user: data.user, period: data.period, periodStart: data.periodStart },
+        { $set: data },
+        { upsert: true, returnDocument: 'after', runValidators: true },
+      ),
+  },
+  workout: {
+    create: (data: (typeof workouts)[number]) =>
+      WorkoutModel.findOneAndUpdate(
+        { title: data.title },
+        { $set: data },
+        { upsert: true, returnDocument: 'after', runValidators: true },
+      ),
+  },
+};
+
 async function seedDatabase(): Promise<void> {
   try {
     await connectDatabase();
 
     const teamRecords = new Map<string, mongoose.Types.ObjectId>();
     for (const team of teams) {
-      const record = await TeamModel.findOneAndUpdate(
-        { name: team.name },
-        { $set: team, $setOnInsert: { members: [] } },
-        { upsert: true, returnDocument: 'after', runValidators: true },
-      );
+      const record = await writers.team.create(team);
       teamRecords.set(team.name, record._id);
     }
 
@@ -99,14 +141,7 @@ async function seedDatabase(): Promise<void> {
         throw new Error(`Seed team not found: ${user.team}`);
       }
 
-      const record = await UserModel.findOneAndUpdate(
-        { email: user.email },
-        {
-          $set: { displayName: user.displayName, bio: user.bio, team: teamId },
-          $setOnInsert: { email: user.email },
-        },
-        { upsert: true, returnDocument: 'after', runValidators: true },
-      );
+      const record = await writers.user.create(user, teamId);
       userRecords.set(user.email, record._id);
     }
 
@@ -143,11 +178,7 @@ async function seedDatabase(): Promise<void> {
     await removePreviousSeedActivities(userRecords, weekStart);
 
     for (const activity of activityFixtures) {
-      await ActivityModel.findOneAndUpdate(
-        { _id: activity._id },
-        { $set: activity },
-        { upsert: true, returnDocument: 'after', runValidators: true },
-      );
+      await writers.activity.create(activity);
     }
 
     const activityTotals = new Map<string, number>();
@@ -171,27 +202,18 @@ async function seedDatabase(): Promise<void> {
       .sort((a, b) => b.points - a.points);
 
     for (const [index, entry] of rankedUsers.entries()) {
-      await LeaderboardModel.findOneAndUpdate(
-        { user: entry.userId, period: 'weekly', periodStart: weekStart },
-        {
-          $set: {
-            team: entry.teamId,
-            points: entry.points,
-            rank: index + 1,
-            period: 'weekly',
-            periodStart: weekStart,
-          },
-        },
-        { upsert: true, returnDocument: 'after', runValidators: true },
-      );
+      await writers.leaderboard.create({
+        user: entry.userId,
+        team: entry.teamId,
+        points: entry.points,
+        rank: index + 1,
+        period: 'weekly',
+        periodStart: weekStart,
+      });
     }
 
     for (const workout of workouts) {
-      await WorkoutModel.findOneAndUpdate(
-        { title: workout.title },
-        { $set: workout },
-        { upsert: true, returnDocument: 'after', runValidators: true },
-      );
+      await writers.workout.create(workout);
     }
 
     console.log(
