@@ -22,6 +22,25 @@ const teams = [
   { name: 'Pulse Crew', description: 'A team that keeps every workout moving.' },
 ] as const;
 
+const activityPlans = [
+  [
+    { type: 'running' as const, durationMinutes: 32, distanceKm: 5.2, points: 52 },
+    { type: 'strength' as const, durationMinutes: 35, points: 35 },
+  ],
+  [
+    { type: 'strength' as const, durationMinutes: 40, points: 40 },
+    { type: 'walking' as const, durationMinutes: 42, distanceKm: 3.5, points: 35 },
+  ],
+  [
+    { type: 'cycling' as const, durationMinutes: 48, distanceKm: 18, points: 70 },
+    { type: 'swimming' as const, durationMinutes: 35, distanceKm: 1.2, points: 45 },
+  ],
+  [
+    { type: 'walking' as const, durationMinutes: 50, distanceKm: 4, points: 45 },
+    { type: 'running' as const, durationMinutes: 24, distanceKm: 3.2, points: 36 },
+  ],
+] as const;
+
 const workouts = [
   {
     title: 'Steady Start Run',
@@ -41,6 +60,7 @@ const workouts = [
       { name: 'Squats', sets: 3, reps: 12 },
       { name: 'Push-ups', sets: 3, reps: 8 },
       { name: 'Glute bridges', sets: 3, reps: 12 },
+      { name: 'Plank', sets: 3, reps: 30 },
     ],
   },
   {
@@ -49,7 +69,11 @@ const workouts = [
     category: 'recovery' as const,
     difficulty: 'beginner' as const,
     durationMinutes: 15,
-    exercises: [{ name: 'Full-body mobility' }],
+    exercises: [
+      { name: 'Cat-cow stretch', durationSeconds: 60 },
+      { name: 'Standing hamstring stretch', durationSeconds: 45 },
+      { name: "Child's pose", durationSeconds: 60 },
+    ],
   },
 ] as const;
 
@@ -98,31 +122,20 @@ async function seedDatabase(): Promise<void> {
       await TeamModel.updateOne({ _id: teamId }, { $set: { members: memberIds } });
     }
 
-    const weekStart = getUtcWeekStart(new Date());
+    const now = new Date();
+    const weekStart = getUtcWeekStart(now);
+    const currentWeekday = (now.getUTCDay() + 6) % 7;
     const activityFixtures = users.flatMap((user, userIndex) => {
       const userId = userRecords.get(user.email);
       if (!userId) {
         throw new Error(`Seed user not found: ${user.email}`);
       }
 
-      return [
-        {
-          user: userId,
-          type: (['running', 'strength', 'cycling', 'walking'] as const)[userIndex],
-          durationMinutes: 25 + userIndex * 5,
-          distanceKm: userIndex % 2 === 0 ? 3 + userIndex : undefined,
-          points: 40 + userIndex * 10,
-          performedAt: new Date(weekStart.getTime() + (userIndex * 2 + 1) * 60 * 60 * 1000),
-        },
-        {
-          user: userId,
-          type: (['strength', 'walking', 'swimming', 'running'] as const)[userIndex],
-          durationMinutes: 20 + userIndex * 5,
-          distanceKm: userIndex % 2 === 1 ? 2 + userIndex : undefined,
-          points: 30 + userIndex * 10,
-          performedAt: new Date(weekStart.getTime() + (userIndex * 2 + 2) * 60 * 60 * 1000),
-        },
-      ];
+      return activityPlans[userIndex].map((activity, activityIndex) => ({
+        user: userId,
+        ...activity,
+        performedAt: getActivityDate(weekStart, currentWeekday, userIndex, activityIndex),
+      }));
     });
 
     for (const activity of activityFixtures) {
@@ -193,6 +206,27 @@ function getUtcWeekStart(date: Date): Date {
   const daysSinceMonday = (weekStart.getUTCDay() + 6) % 7;
   weekStart.setUTCDate(weekStart.getUTCDate() - daysSinceMonday);
   return weekStart;
+}
+
+function getActivityDate(
+  weekStart: Date,
+  currentWeekday: number,
+  userIndex: number,
+  activityIndex: number,
+): Date {
+  const daysAgo =
+    currentWeekday === 0 ? 0 : 1 + ((userIndex + activityIndex * 2) % currentWeekday);
+  const dayIndex = currentWeekday - daysAgo;
+  const date = new Date(weekStart);
+  date.setUTCDate(date.getUTCDate() + dayIndex);
+
+  if (dayIndex === currentWeekday) {
+    date.setUTCHours(0, activityIndex * 30, 0, 0);
+  } else {
+    date.setUTCHours(activityIndex === 0 ? 8 : 18, 0, 0, 0);
+  }
+
+  return date;
 }
 
 seedDatabase();

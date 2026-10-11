@@ -4,6 +4,7 @@ export interface WorkoutExercise {
   name: string;
   sets?: number;
   reps?: number;
+  durationSeconds?: number;
 }
 
 export interface Workout {
@@ -27,6 +28,7 @@ const workoutSchema = new Schema<Workout>(
         name: { type: String, required: true, trim: true },
         sets: { type: Number, min: 1 },
         reps: { type: Number, min: 1 },
+        durationSeconds: { type: Number, min: 1 },
       },
     ],
   },
